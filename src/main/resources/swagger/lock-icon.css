@@ -1,0 +1,51 @@
+/*
+ * Swagger UI ships the padlock the other way round: closed once you are authorized,
+ * open while you are not. This swaps the two, so a successful "Authorize" shows an
+ * open lock — the door is open — and a missing token shows a closed one.
+ *
+ * Swagger UI puts the state in a class: on the top button it is on the button itself
+ * (.authorize.locked / .unlocked), per operation it is on the inner svg.
+ * Injected into index.html by SwaggerLockIconTransformer.
+ */
+
+/* Material "lock" and "lock_open", used as masks so they take the button's colour. */
+:root {
+    --lock-closed: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6-9h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zM9 6a3 3 0 0 1 6 0v2H9V6z'/></svg>");
+    --lock-open: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M18 8h-1V6a5 5 0 0 0-9.9-1h2.1A3 3 0 0 1 15 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4z'/></svg>");
+}
+
+.swagger-ui .auth-wrapper .authorize::after,
+.swagger-ui .authorization__btn::after {
+    content: "";
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    background-color: currentColor;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: 20px 20px;
+    mask-size: 20px 20px;
+}
+
+/* Hide the icons Swagger UI draws itself. */
+.swagger-ui .auth-wrapper .authorize svg,
+.swagger-ui .authorization__btn svg {
+    display: none;
+}
+
+/* Not authorized -> closed. */
+.swagger-ui .auth-wrapper .authorize.unlocked::after,
+.swagger-ui .authorization__btn:has(svg.unlocked)::after {
+    -webkit-mask-image: var(--lock-closed);
+    mask-image: var(--lock-closed);
+}
+
+/* Authorized -> open. */
+.swagger-ui .auth-wrapper .authorize.locked::after,
+.swagger-ui .authorization__btn:has(svg.locked)::after {
+    -webkit-mask-image: var(--lock-open);
+    mask-image: var(--lock-open);
+}
