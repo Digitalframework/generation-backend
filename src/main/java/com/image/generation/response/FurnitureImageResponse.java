@@ -32,7 +32,7 @@ public record FurnitureImageResponse(
 ) {
 
     /**
-     * Where the PNG itself can be fetched.
+     * Where the picture itself can be fetched; {@link #contentType} says in which format.
      */
     @JsonProperty("contentUrl")
     public String contentUrl() {

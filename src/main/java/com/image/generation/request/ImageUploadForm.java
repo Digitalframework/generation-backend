@@ -21,7 +21,8 @@ public record ImageUploadForm(
 
         @NotNull
         @Schema(type = "string", format = "binary",
-                description = "A 1024x1024 PNG named <name>_<width>x<height>x<depth>.png, e.g. Hoeffner_1_180x90x40.png")
+                description = "A 1024x1024 PNG or JPEG named <name>_<width>x<height>x<depth>.<png|jpg>, "
+                        + "e.g. Hoeffner_1_180x90x40.png. The measurements may be left off: Hoeffner_1.png is also accepted")
         MultipartFile file,
 
         @NotNull

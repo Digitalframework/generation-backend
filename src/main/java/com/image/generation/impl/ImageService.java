@@ -44,12 +44,12 @@ public class ImageService
 
     private final FurnitureImageRepository images;
     private final CategoryService categories;
-    private final PngUpload pngUpload;
+    private final ImageUpload imageUpload;
 
-    ImageService(FurnitureImageRepository images, CategoryService categories, PngUpload pngUpload) {
+    ImageService(FurnitureImageRepository images, CategoryService categories, ImageUpload imageUpload) {
         this.images = images;
         this.categories = categories;
-        this.pngUpload = pngUpload;
+        this.imageUpload = imageUpload;
     }
 
     public Page<FurnitureImageResponse> search(Long categoryId, Room room, String style, Pageable pageable) {
@@ -72,7 +72,8 @@ public class ImageService
     }
 
     /**
-     * Reads the blob back out of the database so it can be streamed as a PNG.
+     * Reads the blob back out of the database, together with the content type it was
+     * stored under, so it can be streamed back as whatever format it arrived in.
      */
     public FurnitureImageContent content(Long id) throws NotFoundException {
         return images.findContentById(id).orElseThrow(() -> NotFoundException.of("Image", id));
@@ -90,27 +91,28 @@ public class ImageService
     }
 
     /**
-     * The name and the measurements are read from the upload file name
-     * ({@code Hoeffner_1_180x90x40.png}); room, category and style are picked in the form.
+     * The name and, if the file name states them, the measurements are read from the
+     * upload file name ({@code Hoeffner_1_180_20_3.png}); room, category and style are
+     * picked in the form. A name without measurements is stored with none.
      */
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public FurnitureImageResponse create(MultipartFile file, ImageUploadRequest request)
             throws NotFoundException, ConflictException {
-        PngUpload.Png png = pngUpload.read(file);
-        FurnitureFileNameAndDimensionParser parsed = FurnitureFileNameAndDimensionParser.parse(png.fileName());
-        rejectDuplicate(png.sha256(), null);
+        ImageUpload.UploadedImage uploaded = imageUpload.read(file);
+        FurnitureFileNameAndDimensionParser parsed = FurnitureFileNameAndDimensionParser.parse(uploaded.fileName());
+        rejectDuplicate(uploaded.sha256(), null);
 
         FurnitureCategory category = categories.require(request.room(), request.category());
         FurnitureImage image = new FurnitureImage(
                 category,
                 parsed.name(),
-                png.fileName(),
-                png.contentType(),
-                png.widthPx(),
-                png.heightPx(),
-                png.data(),
-                png.sha256(),
+                uploaded.fileName(),
+                uploaded.contentType(),
+                uploaded.widthPx(),
+                uploaded.heightPx(),
+                uploaded.data(),
+                uploaded.sha256(),
                 parsed.widthCm(),
                 parsed.heightCm(),
                 parsed.depthCm(),
@@ -141,10 +143,11 @@ public class ImageService
     public FurnitureImageResponse replaceContent(Long id, MultipartFile file)
             throws NotFoundException, ConflictException {
         FurnitureImage image = require(id);
-        PngUpload.Png png = pngUpload.read(file);
-        FurnitureFileNameAndDimensionParser parsed = FurnitureFileNameAndDimensionParser.parse(png.fileName());
-        rejectDuplicate(png.sha256(), id);
-        image.replaceContent(parsed, png.fileName(), png.contentType(), png.widthPx(), png.heightPx(), png.data(), png.sha256());
+        ImageUpload.UploadedImage uploaded = imageUpload.read(file);
+        FurnitureFileNameAndDimensionParser parsed = FurnitureFileNameAndDimensionParser.parse(uploaded.fileName());
+        rejectDuplicate(uploaded.sha256(), id);
+        image.replaceContent(parsed, uploaded.fileName(), uploaded.contentType(),
+                uploaded.widthPx(), uploaded.heightPx(), uploaded.data(), uploaded.sha256());
         images.flush();
         return get(id);
     }

@@ -120,7 +120,8 @@ class ImageController {
     }
 
     /**
-     * Streams the stored blob back as a PNG.
+     * Streams the stored blob back under the content type it was stored with — a
+     * PNG upload is served as {@code image/png}, a JPEG as {@code image/jpeg}.
      *
      * A plain {@code <img src="/api/images/42/content">} will not do any more, since an
      * img tag sends no Authorization header: fetch the bytes with the token and give
@@ -131,9 +132,9 @@ class ImageController {
      * must not — {@code public} would let it hand a stored copy to a caller who never
      * presented a token, which is exactly what requiring one is meant to prevent.
      */
-    @Operation(summary = "Get an image's PNG content")
+    @Operation(summary = "Get an image's bytes")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "The PNG bytes"),
+            @ApiResponse(responseCode = "200", description = "The image bytes, as PNG or JPEG"),
             @ApiResponse(responseCode = "304", description = "The client's cached copy is still current"),
             @ApiResponse(responseCode = "404", description = "No image with this id exists")
     })
@@ -146,7 +147,7 @@ class ImageController {
             return ResponseEntity.status(304).eTag(eTag).build();
         }
         return ResponseEntity.ok()
-                .contentType(MediaType.IMAGE_PNG)
+                .contentType(MediaType.parseMediaType(content.contentType()))
                 .eTag(eTag)
                 .cacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePrivate())
                 .header("Content-Disposition",
@@ -155,16 +156,20 @@ class ImageController {
     }
 
     /**
-     * Uploads a 1024x1024 PNG as multipart/form-data: the {@code file} part plus room,
-     * category and style. The furniture name and its measurements are read from the file
-     * name, e.g. {@code Hoeffner_1_180x90x40.png}.
+     * Uploads a 1024x1024 PNG or JPEG as multipart/form-data: the {@code file} part plus
+     * room, category and style. The furniture name and, where the file name states them,
+     * its measurements are read from the file name, e.g. {@code Hoeffner_1_180_20_3.png}.
      */
     @Operation(summary = "Upload a picture",
             description = """
-                    Pick a 1024x1024 PNG, the room, the furniture kind and the style.
+                    Pick a 1024x1024 PNG or JPEG, the room, the furniture kind and the style.
                     The furniture name and its measurements come from the file name:
-                    <name>_<width>x<height>x<depth>.png, e.g. Hoeffner_1_180x90x40.png
-                    means Hoeffner_1, 180 cm wide, 90 cm high, 40 cm deep.""")
+                    <name>_<width>_<height>_<depth>.<png|jpg>, e.g. Hoeffner_1_180_20_3.png
+                    means Hoeffner_1, 180 cm wide, 20 cm high, 3 cm deep.
+
+                    The measurements are optional: Hoeffner_1.png uploads the same picture
+                    under the name Hoeffner_1 with no measurements, which can be filled in
+                    later with PUT /api/images/{id}.""")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "The stored image"),
             @ApiResponse(responseCode = "404", description = "The given room/category combination does not exist")
@@ -195,9 +200,9 @@ class ImageController {
     }
 
     /**
-     * Replaces the stored PNG while keeping the metadata.
+     * Replaces the stored picture while keeping the metadata.
      */
-    @Operation(summary = "Replace an image's PNG content")
+    @Operation(summary = "Replace an image's content")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "The updated metadata"),
             @ApiResponse(responseCode = "404", description = "No image with this id exists")

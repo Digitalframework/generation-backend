@@ -39,8 +39,8 @@ class OpenApiConfig {
                 .title("Furniture picture API")
                 .version("v1")
                 .description("""
-                        1024x1024 PNG renderings of furniture, stored as blobs in PostgreSQL.
-                        The upload file name carries the name and the measurements:
-                        <name>_<width>x<height>x<depth>.png, e.g. Hoeffner_1_180x90x40.png."""));
+                        1024x1024 PNG or JPEG renderings of furniture, stored as blobs in PostgreSQL.
+                        The upload file name carries the name and, optionally, the measurements:
+                        <name>_<width>x<height>x<depth>.<png|jpg>, e.g. Hoeffner_1_180x90x40.png."""));
     }
 }

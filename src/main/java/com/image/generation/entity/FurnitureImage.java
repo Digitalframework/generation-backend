@@ -20,8 +20,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * A single 1024x1024 PNG rendering of a piece of furniture, stored as a bytea blob
- * together with the real-world dimensions and the style it depicts.
+ * A single 1024x1024 rendering of a piece of furniture — a PNG or a JPEG, which is
+ * what {@code contentType} records — stored as a bytea blob together with the
+ * real-world dimensions and the style it depicts.
  * <p>
  * The {@code data} column is never selected by the metadata queries in
  * {@link FurnitureImageRepository} — only {@code findDataById} reads it.
@@ -63,13 +64,17 @@ public class FurnitureImage {
     @Column(name = "sha256", nullable = false, length = 64)
     private String sha256;
 
-    @Column(name = "width_cm", nullable = false, precision = 7, scale = 2)
+    /**
+     * Null when the measurements are not known — see V4__optional_measurements.sql.
+     * The three are written and cleared together everywhere they are set.
+     */
+    @Column(name = "width_cm", precision = 7, scale = 2)
     private BigDecimal widthCm;
 
-    @Column(name = "depth_cm", nullable = false, precision = 7, scale = 2)
+    @Column(name = "depth_cm", precision = 7, scale = 2)
     private BigDecimal depthCm;
 
-    @Column(name = "height_cm", nullable = false, precision = 7, scale = 2)
+    @Column(name = "height_cm", precision = 7, scale = 2)
     private BigDecimal heightCm;
 
     @Column(name = "style", nullable = false, length = 64)
@@ -118,7 +123,7 @@ public class FurnitureImage {
     }
 
     /**
-     * Replaces the stored PNG. The new file name is authoritative again, so the
+     * Replaces the stored picture. The new file name is authoritative again, so the
      * name and the measurements it encodes are re-applied along with it.
      */
     public void replaceContent(FurnitureFileNameAndDimensionParser parsed,
