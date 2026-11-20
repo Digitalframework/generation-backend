@@ -21,11 +21,12 @@ import java.time.Instant;
 
 /**
  * A single 1024x1024 rendering of a piece of furniture — a PNG or a JPEG, which is
- * what {@code contentType} records — stored as a bytea blob together with the
- * real-world dimensions and the style it depicts.
+ * what {@code contentType} records — together with the real-world dimensions and the
+ * style it depicts.
  * <p>
- * The {@code data} column is never selected by the metadata queries in
- * {@link FurnitureImageRepository} — only {@code findDataById} reads it.
+ * The picture bytes are not part of the entity: they are kept by the active
+ * {@code ImageStorage} (database column or Cloud Storage bucket) under the
+ * {@code sha256}. {@link FurnitureImageRepository} only ever reads metadata.
  */
 @Entity
 @Table(name = "furniture_image")
@@ -80,9 +81,6 @@ public class FurnitureImage {
     @Column(name = "style", nullable = false, length = 64)
     private String style;
 
-    @Column(name = "data", nullable = false)
-    private byte[] data;
-
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -101,7 +99,7 @@ public class FurnitureImage {
                           String contentType,
                           int widthPx,
                           int heightPx,
-                          byte[] data,
+                          long sizeBytes,
                           String sha256,
                           BigDecimal widthCm,
                           BigDecimal heightCm,
@@ -113,8 +111,7 @@ public class FurnitureImage {
         this.contentType = contentType;
         this.widthPx = widthPx;
         this.heightPx = heightPx;
-        this.data = data;
-        this.sizeBytes = data.length;
+        this.sizeBytes = sizeBytes;
         this.sha256 = sha256;
         this.widthCm = widthCm;
         this.depthCm = depthCm;
@@ -123,15 +120,16 @@ public class FurnitureImage {
     }
 
     /**
-     * Replaces the stored picture. The new file name is authoritative again, so the
-     * name and the measurements it encodes are re-applied along with it.
+     * Replaces the picture's metadata; the caller stores the new bytes. The new file
+     * name is authoritative again, so the name and the measurements it encodes are
+     * re-applied along with it.
      */
     public void replaceContent(FurnitureFileNameAndDimensionParser parsed,
                                String fileName,
                                String contentType,
                                int widthPx,
                                int heightPx,
-                               byte[] data,
+                               long sizeBytes,
                                String sha256) {
         this.name = parsed.name();
         this.widthCm = parsed.widthCm();
@@ -141,8 +139,7 @@ public class FurnitureImage {
         this.contentType = contentType;
         this.widthPx = widthPx;
         this.heightPx = heightPx;
-        this.data = data;
-        this.sizeBytes = data.length;
+        this.sizeBytes = sizeBytes;
         this.sha256 = sha256;
     }
 
@@ -188,10 +185,6 @@ public class FurnitureImage {
 
     public String getSha256() {
         return sha256;
-    }
-
-    public byte[] getData() {
-        return data;
     }
 
     public BigDecimal getWidthCm() {

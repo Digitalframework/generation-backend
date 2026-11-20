@@ -5,6 +5,7 @@ import com.image.generation.common.ApiExceptions.NotFoundException;
 import com.image.generation.common.Sorts;
 import com.image.generation.repository.CustomFurnitureImageRepository;
 import com.image.generation.entity.FurnitureImageContent;
+import com.image.generation.entity.FurnitureImageFile;
 import com.image.generation.entity.Room;
 import com.image.generation.entity.FurnitureCategory;
 import com.image.generation.entity.FurnitureImage;
@@ -13,11 +14,14 @@ import com.image.generation.request.ImageMetadataRequest;
 import com.image.generation.request.ImageUploadForm;
 import com.image.generation.request.ImageUploadRequest;
 import com.image.generation.response.FurnitureImageResponse;
+import com.image.generation.storage.ImageStorage;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -45,11 +49,14 @@ public class ImageService
     private final FurnitureImageRepository images;
     private final CategoryService categories;
     private final ImageUpload imageUpload;
+    private final ImageStorage storage;
 
-    ImageService(FurnitureImageRepository images, CategoryService categories, ImageUpload imageUpload) {
+    ImageService(FurnitureImageRepository images, CategoryService categories, ImageUpload imageUpload,
+                 ImageStorage storage) {
         this.images = images;
         this.categories = categories;
         this.imageUpload = imageUpload;
+        this.storage = storage;
     }
 
     public Page<FurnitureImageResponse> search(Long categoryId, Room room, String style, Pageable pageable) {
@@ -72,11 +79,14 @@ public class ImageService
     }
 
     /**
-     * Reads the blob back out of the database, together with the content type it was
-     * stored under, so it can be streamed back as whatever format it arrived in.
+     * Reads the picture back out of the active {@link ImageStorage}, together with the
+     * content type it was stored under, so it can be streamed back as whatever format
+     * it arrived in.
      */
     public FurnitureImageContent content(Long id) throws NotFoundException {
-        return images.findContentById(id).orElseThrow(() -> NotFoundException.of("Image", id));
+        FurnitureImageFile file = images.findFileById(id).orElseThrow(() -> NotFoundException.of("Image", id));
+        return new FurnitureImageContent(file.fileName(), file.contentType(), file.sha256(),
+                storage.load(file.sha256()));
     }
 
     /**
@@ -111,7 +121,7 @@ public class ImageService
                 uploaded.contentType(),
                 uploaded.widthPx(),
                 uploaded.heightPx(),
-                uploaded.data(),
+                uploaded.data().length,
                 uploaded.sha256(),
                 parsed.widthCm(),
                 parsed.heightCm(),
@@ -119,7 +129,10 @@ public class ImageService
                 request.style().trim());
 
         Long id = images.save(image).getId();
+        // Flushed first, so a constraint violation stops the upload before anything is stored.
         images.flush();
+        storage.save(uploaded.sha256(), uploaded.contentType(), uploaded.data());
+        deleteFromStorageOnRollback(uploaded.sha256());
         return get(id);
     }
 
@@ -146,9 +159,15 @@ public class ImageService
         ImageUpload.UploadedImage uploaded = imageUpload.read(file);
         FurnitureFileNameAndDimensionParser parsed = FurnitureFileNameAndDimensionParser.parse(uploaded.fileName());
         rejectDuplicate(uploaded.sha256(), id);
+        String previousSha256 = image.getSha256();
         image.replaceContent(parsed, uploaded.fileName(), uploaded.contentType(),
-                uploaded.widthPx(), uploaded.heightPx(), uploaded.data(), uploaded.sha256());
+                uploaded.widthPx(), uploaded.heightPx(), uploaded.data().length, uploaded.sha256());
         images.flush();
+        storage.save(uploaded.sha256(), uploaded.contentType(), uploaded.data());
+        if (!previousSha256.equals(uploaded.sha256())) {
+            deleteFromStorageOnRollback(uploaded.sha256());
+            deleteFromStorageAfterCommit(previousSha256);
+        }
         return get(id);
     }
 
@@ -156,7 +175,37 @@ public class ImageService
     @Transactional
     @Override
     public void delete(Long id) throws NotFoundException {
-        images.delete(require(id));
+        FurnitureImage image = require(id);
+        images.delete(image);
+        deleteFromStorageAfterCommit(image.getSha256());
+    }
+
+    /**
+     * A bucket is not part of the database transaction. Bytes written for a row that
+     * then rolls back are removed again, so no orphaned object is left behind.
+     */
+    private void deleteFromStorageOnRollback(String sha256) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    storage.delete(sha256);
+                }
+            }
+        });
+    }
+
+    /**
+     * Old bytes are only removed once the row change is committed, so a rollback never
+     * leaves a row pointing at a picture that is already gone.
+     */
+    private void deleteFromStorageAfterCommit(String sha256) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                storage.delete(sha256);
+            }
+        });
     }
 
     private FurnitureImage require(Long id) throws NotFoundException {

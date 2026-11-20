@@ -1,7 +1,7 @@
 package com.image.generation.repository;
 
 import com.image.generation.entity.FurnitureImage;
-import com.image.generation.entity.FurnitureImageContent;
+import com.image.generation.entity.FurnitureImageFile;
 import com.image.generation.response.FurnitureImageResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -14,7 +14,7 @@ import java.util.Optional;
 public interface FurnitureImageRepository extends JpaRepository<FurnitureImage, Long>, CustomFurnitureImageRepository {
 
     /**
-     * Metadata only — deliberately avoids selecting the {@code data} column.
+     * Metadata only — the picture bytes are kept by {@code ImageStorage}.
      */
     @Query("""
             select new com.image.generation.response.FurnitureImageResponse(
@@ -44,15 +44,15 @@ public interface FurnitureImageRepository extends JpaRepository<FurnitureImage, 
     List<FurnitureImageResponse> findResponsesByIdIn(@Param("ids") Collection<Long> ids);
 
     /**
-     * The blob plus just enough to build the HTTP response.
+     * Just enough to fetch the bytes from {@code ImageStorage} and build the HTTP response.
      */
     @Query("""
-            select new com.image.generation.entity.FurnitureImageContent(
-                i.fileName, i.contentType, i.sha256, i.data)
+            select new com.image.generation.entity.FurnitureImageFile(
+                i.fileName, i.contentType, i.sha256)
             from FurnitureImage i
             where i.id = :id
             """)
-    Optional<FurnitureImageContent> findContentById(@Param("id") Long id);
+    Optional<FurnitureImageFile> findFileById(@Param("id") Long id);
 
     Optional<FurnitureImage> findBySha256(String sha256);
 
